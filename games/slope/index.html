@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Slope — Arcadia</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{font-family:Inter,system-ui,sans-serif;background:#0A0A12;color:#ECECF5;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  #wrap{position:relative;width:100%;max-width:900px;aspect-ratio:16/10;margin:auto}
+  canvas{width:100%;height:100%;display:block;background:#0A0A12;border-radius:14px;border:1px solid rgba(255,255,255,.08)}
+  .hud{position:absolute;top:12px;left:14px;right:14px;display:flex;justify-content:space-between;pointer-events:none}
+  .hud .s{background:rgba(10,10,18,.7);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:6px 12px;font-weight:700;font-size:14px;font-variant-numeric:tabular-nums;backdrop-filter:blur(6px)}
+  .hud .s span{color:#9a9ab5;font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin-right:6px}
+  .ov{position:absolute;inset:0;display:grid;place-items:center;background:rgba(10,10,18,.82);backdrop-filter:blur(4px);border-radius:14px;text-align:center}
+  .ov.hide{display:none}
+  .ov h2{font-family:Syne,sans-serif;font-size:30px;margin-bottom:6px}
+  .ov p{color:#9a9ab5;margin-bottom:18px;font-size:14px}
+  .btn{padding:12px 22px;border-radius:11px;background:linear-gradient(90deg,#7C3AED,#9333ea);color:#fff;font-weight:600;border:none;cursor:pointer;font-size:15px}
+  .btn:hover{filter:brightness(1.1)}
+  .ctrls{position:absolute;bottom:10px;left:0;right:0;display:none;justify-content:space-between;padding:0 14px;pointer-events:none}
+  .ctrls button{width:80px;height:64px;border-radius:12px;background:rgba(124,58,237,.3);border:1px solid rgba(124,58,237,.5);color:#fff;font-size:26px;pointer-events:auto}
+  @media(pointer:coarse){.ctrls{display:flex}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c" width="900" height="562"></canvas>
+  <div class="hud"><div class="s"><span>Score</span><b id="sc">0</b></div><div class="s"><span>Best</span><b id="bs">0</b></div></div>
+  <div class="ctrls"><button id="bl">&lt;</button><button id="br">&gt;</button></div>
+  <div class="ov" id="st"><div><h2>Slope</h2><p>Steer the ball down the endless track. Dodge the red walls.</p><p style="margin-bottom:14px;font-size:12px">Arrow keys / A·D / touch buttons</p><button class="btn" id="start">Start</button></div></div>
+  <div class="ov hide" id="go"><div><h2 style="color:#f43f5e">Game over</h2><p>Distance: <b id="gos">0</b></p><button class="btn" id="again">Try again</button></div></div>
+</div>
+<script>
+(function(){
+var cv=document.getElementById('c'),ctx=cv.getContext('2d'),W=900,H=562;
+var scEl=document.getElementById('sc'),bsEl=document.getElementById('bs'),stEl=document.getElementById('st'),goEl=document.getElementById('go'),gosEl=document.getElementById('gos');
+var best=+localStorage.getItem('arcadiaSlopeBest')||0;bsEl.textContent=best;
+var ball,track,obs,speed,score,running,dead,scrollY,segLen;
+var keys={left:false,right:false};
+function reset(){
+  ball={x:W/2,y:0,vx:0,r:14};speed=4.2;score=0;scrollY=0;obs=[];dead=false;running=true;
+  // track is a centerline; lanes left-right. Generate obstacles ahead.
+  for(var i=0;i<24;i++)spawnObs(80+i*70);
+  stEl.classList.add('hide');goEl.classList.add('hide');
+}
+function spawnObs(y){
+  // randomly place 1-2 walls with gaps
+  var lane=Math.floor(Math.random()*5)-2; // -2..2
+  obs.push({y:y,x:W/2+lane*70,w:22,h:40,type:Math.random()<0.35?'gap':'wall'});
+  if(Math.random()<0.3){obs.push({y:y+ (Math.random()<.5?0:40),x:W/2+((lane+2)%5-2)*70,w:22,h:40,type:'wall'});}
+}
+function upd(){
+  if(!running)return;
+  // steering
+  if(keys.left)ball.vx-=0.55;
+  if(keys.right)ball.vx+=0.55;
+  ball.vx*=0.9;ball.vx=Math.max(-7,Math.min(7,ball.vx));
+  ball.x+=ball.vx;
+  // walls (track edges)
+  var edge=W/2-180;
+  if(ball.x<edge+ball.r){ball.x=edge+ball.r;ball.vx*=-0.4;}
+  if(ball.x>W-edge-ball.r){ball.x=W-edge-ball.r;ball.vx*=-0.4;}
+  // scroll
+  scrollY+=speed;score=Math.floor(scrollY/10);
+  speed=4.2+Math.min(7,score/400);
+  // recycle obstacles
+  for(var i=obs.length-1;i>=0;i--){obs[i].y-=speed;if(obs[i].y<-50)obs.splice(i,1);}
+  // spawn new
+  var topY=0;obs.forEach(function(o){if(o.y>topY)topY=o.y;});
+  while(topY<H+200){topY+=70+Math.random()*40;spawnObs(topY);}
+  // collision (ball stays at screen-center y visually; obstacles move down)
+  var by=H*0.62;
+  for(var i=0;i<obs.length;i++){var o=obs[i];
+    if(o.type==='gap')continue;
+    if(o.y<by+ball.r && o.y+o.h>by-ball.r && o.x<ball.x+ball.r && o.x+o.w>ball.x-ball.r){die();return;}
+  }
+  scEl.textContent=score;
+}
+function die(){dead=true;running=false;if(score>best){best=score;localStorage.setItem('arcadiaSlopeBest',best);}bsEl.textContent=best;gosEl.textContent=score;goEl.classList.remove('hide');}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // perspective track
+  ctx.fillStyle='#0A0A12';ctx.fillRect(0,0,W,H);
+  // vanishing point center top
+  var vpX=W/2,vpY=H*0.2;
+  var edge=W/2-180;
+  // draw track as a trapezoid receding
+  ctx.save();
+  // track fill
+  var grd=ctx.createLinearGradient(0,vpY,0,H);grd.addColorStop(0,'#0f0f1c');grd.addColorStop(1,'#14142a');
+  ctx.fillStyle=grd;
+  ctx.beginPath();ctx.moveTo(W/2-30,vpY);ctx.lineTo(W/2+30,vpY);ctx.lineTo(W-edge,H);ctx.lineTo(edge,H);ctx.closePath();ctx.fill();
+  // lane lines
+  ctx.strokeStyle='rgba(124,58,237,.35)';ctx.lineWidth=2;
+  for(var L=-2;L<=2;L++){
+    var tx=W/2+L*12;
+    ctx.beginPath();ctx.moveTo(tx,vpY);ctx.lineTo(W/2+L*72,H);ctx.stroke();
+  }
+  // horizontal scroll lines for speed sensation
+  var off=(scrollY*0.8)%80;
+  ctx.strokeStyle='rgba(34,211,238,.18)';ctx.lineWidth=1;
+  for(var i=0;i<14;i++){
+    var t=(i*80+off)/(H-vpY);if(t<0||t>1)continue;
+    var yy=vpY+t*(H-vpY);
+    var halfW=30+t*(edge-30+W/2-edge*0+0);halfW=30+t*(W/2-30-edge+W/2-edge); // simplify
+    var hw=30+t*((W/2-30)-(edge-W/2))*1; // approximate width
+    hw=(W/2-edge)*t+30;
+    ctx.beginPath();ctx.moveTo(W/2-hw,yy);ctx.lineTo(W/2+hw,yy);ctx.globalAlpha=t;ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+  // obstacles
+  obs.forEach(function(o){var t=o.y/(H);var hw=30+((W/2-30)-(edge-W/2))*t;var cx=W/2+ (o.x-W/2)*t;var w=o.w*t*1.6,h=o.h*t*1.4;
+    if(o.type==='wall'){ctx.fillStyle='#f43f5e';ctx.shadowColor='#f43f5e';ctx.shadowBlur=12;}else{ctx.fillStyle='#22D3EE';ctx.shadowColor='#22D3EE';ctx.shadowBlur=10;}
+    ctx.fillRect(cx-w/2,o.y-h/2,w,h);ctx.shadowBlur=0;
+  });
+  // ball
+  var by=H*0.62;
+  ctx.shadowColor='#22D3EE';ctx.shadowBlur=22;ctx.fillStyle='#22D3EE';ctx.beginPath();ctx.arc(ball.x,by,ball.r,0,7);ctx.fill();
+  ctx.shadowBlur=0;ctx.fillStyle='rgba(255,255,255,.7)';ctx.beginPath();ctx.arc(ball.x-4,by-4,4,0,7);ctx.fill();
+  ctx.restore();
+}
+function loop(){if(running)upd();draw();requestAnimationFrame(loop);}
+// input
+window.addEventListener('keydown',function(e){if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A')keys.left=true;if(e.key==='ArrowRight'||e.key==='d'||e.key==='D')keys.right=true;if(e.key===' '&&!running&&!dead){reset();}});
+window.addEventListener('keyup',function(e){if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A')keys.left=false;if(e.key==='ArrowRight'||e.key==='d'||e.key==='D')keys.right=false;});
+document.getElementById('bl').addEventListener('touchstart',function(e){e.preventDefault();keys.left=true;});
+document.getElementById('bl').addEventListener('touchend',function(e){e.preventDefault();keys.left=false;});
+document.getElementById('br').addEventListener('touchstart',function(e){e.preventDefault();keys.right=true;});
+document.getElementById('br').addEventListener('touchend',function(e){e.preventDefault();keys.right=false;});
+document.getElementById('start').onclick=reset;
+document.getElementById('again').onclick=reset;
+loop();
+})();
+</script>
+</body>
+</html>

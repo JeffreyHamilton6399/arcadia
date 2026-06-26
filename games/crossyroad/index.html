@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Crossy Road — Arcadia</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{font-family:Inter,system-ui,sans-serif;background:#0A0A12;color:#ECECF5;overflow:hidden;display:flex;align-items:center;justify-content:center}
+  #wrap{position:relative;width:100%;max-width:560px;margin:auto}
+  canvas{width:100%;height:auto;display:block;background:#0A0A12;border-radius:14px;border:1px solid rgba(255,255,255,.08)}
+  .hud{position:absolute;top:10px;left:12px;right:12px;display:flex;justify-content:space-between;pointer-events:none}
+  .hud .s{background:rgba(10,10,18,.7);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:5px 11px;font-weight:700;font-size:13px;font-variant-numeric:tabular-nums;backdrop-filter:blur(6px)}
+  .hud .s span{color:#9a9ab5;font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-right:5px}
+  .ov{position:absolute;inset:0;display:grid;place-items:center;background:rgba(10,10,18,.82);backdrop-filter:blur(4px);border-radius:14px;text-align:center}
+  .ov.hide{display:none}
+  .ov h2{font-family:Syne,sans-serif;font-size:26px;margin-bottom:6px}
+  .ov p{color:#9a9ab5;margin-bottom:14px;font-size:13px}
+  .btn{padding:11px 20px;border-radius:10px;background:linear-gradient(90deg,#7C3AED,#9333ea);color:#fff;font-weight:600;border:none;cursor:pointer;font-size:14px}
+  .btn:hover{filter:brightness(1.1)}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c" width="560" height="640"></canvas>
+  <div class="hud"><div class="s"><span>Score</span><b id="sc">0</b></div><div class="s"><span>Best</span><b id="bs">0</b></div></div>
+  <div class="ov" id="st"><div><h2>Crossy Road</h2><p>Hop forward. Dodge the cars. Don't stand still too long.</p><p style="margin-bottom:12px;font-size:12px">Arrow keys / WASD / swipe</p><button class="btn" id="start">Start</button></div></div>
+  <div class="ov hide" id="go"><div><h2 style="color:#f43f5e">Squashed</h2><p id="gos"></p><button class="btn" id="again" style="margin-top:6px">Retry</button></div></div>
+</div>
+<script>
+(function(){
+var cv=document.getElementById('c'),ctx=cv.getContext('2d'),W=560,H=640;
+var scEl=document.getElementById('sc'),bsEl=document.getElementById('bs'),stEl=document.getElementById('st'),goEl=document.getElementById('go'),gosEl=document.getElementById('gos');
+var best=+localStorage.getItem('arcadiaCrossyBest')||0;bsEl.textContent=best;
+var COLS=9,CELL=W/COLS;
+var player,cars,rows,score,running,dead,scrollEdge,tLastCar;
+function reset(){
+  player={col:4,row:0,hop:0};cars=[];rows=[];score=0;running=true;dead=false;scrollEdge=0;tLastCar=0;
+  // build rows: row 0 grass, then alternating
+  for(var r=0;r<24;r++){rows.push(makeRow(r));}
+  stEl.classList.add('hide');goEl.classList.add('hide');
+}
+function makeRow(r){
+  if(r===0)return{type:'grass'};
+  var t=Math.random();
+  if(t<0.5)return{type:'road',dir:Math.random()<0.5?-1:1,speed:1.2+Math.random()*1.8};
+  if(t<0.7)return{type:'road',dir:Math.random()<0.5?-1:1,speed:2.4+Math.random()*1.6};
+  return{type:'grass'};
+}
+function spawnCar(rowIdx){
+  var r=rows[rowIdx];if(!r||r.type!=='road')return;
+  cars.push({row:rowIdx,x:r.dir>0?-CELL:W+CELL,dir:r.dir,speed:r.speed,w:CELL*0.8,h:CELL*0.7,color:['#f43f5e','#F59E0B','#10B981','#A855F7'][Math.floor(Math.random()*4)]});
+}
+function px(col){return col*CELL;}
+function py(row){return H-CELL*2-row*CELL+player.hop*0;}// row 0 at bottom
+function upd(dt){
+  if(!running)return;
+  // scroll edge advances (force forward)
+  scrollEdge+=0.25;
+  if(player.row*1 < scrollEdge-3){die('caught by the edge');return;}
+  // move cars
+  cars.forEach(function(c){c.x+=c.dir*c.speed*1.6;});
+  cars=cars.filter(function(c){return c.x>-CELL*2&&c.x<W+CELL*2;});
+  // spawn
+  tLastCar+=dt;
+  if(tLastCar>700){tLastCar=0;for(var r=Math.max(1,Math.floor(scrollEdge));r<Math.floor(scrollEdge)+16;r++){if(rows[r]&&rows[r].type==='road'&&Math.random()<0.4)spawnCar(r);}}
+  // car collision
+  var pxx=px(player.col)+CELL/2,pyy=py(player.row)+CELL/2;
+  for(var i=0;i<cars.length;i++){var c=cars[i];
+    if(c.row===player.row){var cx2=c.x+CELL/2;if(Math.abs(cx2-pxx)<CELL*0.7){die('hit by a car');return;}}
+  }
+}
+function die(msg){dead=true;running=false;if(score>best){best=score;localStorage.setItem('arcadiaCrossyBest',best);}bsEl.textContent=best;gosEl.textContent='Score '+score+' — '+msg;goEl.classList.remove('hide');}
+function hop(dx,dy){
+  if(!running)return;
+  player.col=Math.max(0,Math.min(COLS-1,player.col+dx));
+  player.row=Math.max(0,player.row+dy);
+  if(dy>0){score=Math.max(score,player.row);scEl.textContent=score;}
+  // ensure rows exist
+  while(rows.length<player.row+20)rows.push(makeRow(rows.length));
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#0A0A12';ctx.fillRect(0,0,W,H);
+  // draw rows from bottom
+  var startRow=Math.max(0,Math.floor(scrollEdge)-1);
+  var camY=scrollEdge*CELL;
+  for(var r=startRow;r<startRow+18;r++){
+    if(!rows[r])continue;
+    var y=H-CELL*2-(r*CELL-camY);
+    if(rows[r].type==='grass'){ctx.fillStyle='#0f1f14';ctx.fillRect(0,y,W,CELL);ctx.fillStyle='rgba(16,185,129,.15)';for(var i=0;i<COLS;i++)if((i+r)%3===0)ctx.fillRect(px(i),y+CELL*0.3,4,4);}
+    else{ctx.fillStyle='#1a1a2e';ctx.fillRect(0,y,W,CELL);ctx.fillStyle='rgba(255,255,255,.06)';ctx.fillRect(0,y+CELL/2-1,W,2);}
+  }
+  // cars
+  cars.forEach(function(c){var y=H-CELL*2-(c.row*CELL-camY);ctx.fillStyle=c.color;ctx.shadowColor=c.color;ctx.shadowBlur=8;ctx.fillRect(c.x,y+CELL*0.15,c.w,c.h);ctx.shadowBlur=0;ctx.fillStyle='rgba(255,255,255,.2)';ctx.fillRect(c.x,y+CELL*0.15,c.w,3);});
+  // player
+  var px2=px(player.col)+CELL/2,py2=H-CELL*2-(player.row*CELL-camY)+CELL/2;
+  ctx.fillStyle='#22D3EE';ctx.shadowColor='#22D3EE';ctx.shadowBlur=12;ctx.fillRect(px2-CELL*0.32,py2-CELL*0.32,CELL*0.64,CELL*0.64);
+  ctx.shadowBlur=0;ctx.fillStyle='#0A0A12';ctx.fillRect(px2-3,py2-3,6,6);
+}
+var last=performance.now();
+function loop(now){var dt=now-last;last=now;upd(dt);draw();requestAnimationFrame(loop);}
+window.addEventListener('keydown',function(e){
+  var k=e.key.toLowerCase();
+  if(k==='arrowup'||k==='w'){e.preventDefault();hop(0,1);}
+  else if(k==='arrowdown'||k==='s'){e.preventDefault();hop(0,-1);}
+  else if(k==='arrowleft'||k==='a'){e.preventDefault();hop(-1,0);}
+  else if(k==='arrowright'||k==='d'){e.preventDefault();hop(1,0);}
+});
+var tsx,tsy;
+cv.addEventListener('touchstart',function(e){e.preventDefault();var t=e.touches[0];tsx=t.clientX;tsy=t.clientY;},{passive:false});
+cv.addEventListener('touchend',function(e){e.preventDefault();var t=e.changedTouches[0];var dx=t.clientX-tsx,dy=t.clientY-tsy;if(Math.abs(dx)>Math.abs(dy)){hop(dx>0?1:-1,0);}else{hop(0,dy>0?-1:1);}},{passive:false});
+document.getElementById('start').onclick=reset;
+document.getElementById('again').onclick=reset;
+// idle draw
+reset();running=false;
+loop(performance.now());
+})();
+</script>
+</body>
+</html>

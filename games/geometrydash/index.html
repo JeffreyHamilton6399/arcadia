@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Geometry Dash — Arcadia</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{font-family:Inter,system-ui,sans-serif;background:#0A0A12;color:#ECECF5;overflow:hidden;display:flex;align-items:center;justify-content:center}
+  #wrap{position:relative;width:100%;max-width:900px;aspect-ratio:16/10;margin:auto}
+  canvas{width:100%;height:100%;display:block;background:#0A0A12;border-radius:14px;border:1px solid rgba(255,255,255,.08)}
+  .hud{position:absolute;top:12px;left:14px;right:14px;display:flex;justify-content:space-between;pointer-events:none}
+  .hud .s{background:rgba(10,10,18,.7);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:6px 12px;font-weight:700;font-size:14px;font-variant-numeric:tabular-nums;backdrop-filter:blur(6px)}
+  .hud .s span{color:#9a9ab5;font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin-right:6px}
+  .ov{position:absolute;inset:0;display:grid;place-items:center;background:rgba(10,10,18,.82);backdrop-filter:blur(4px);border-radius:14px;text-align:center}
+  .ov.hide{display:none}
+  .ov h2{font-family:Syne,sans-serif;font-size:30px;margin-bottom:6px}
+  .ov p{color:#9a9ab5;margin-bottom:8px;font-size:14px}
+  .btn{padding:12px 22px;border-radius:11px;background:linear-gradient(90deg,#7C3AED,#9333ea);color:#fff;font-weight:600;border:none;cursor:pointer;font-size:15px}
+  .btn:hover{filter:brightness(1.1)}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c" width="900" height="562"></canvas>
+  <div class="hud"><div class="s"><span>Progress</span><b id="sc">0%</b></div><div class="s"><span>Best</span><b id="bs">0%</b></div></div>
+  <div class="ov" id="st"><div><h2>Geometry Dash</h2><p>Tap to jump. Land on platforms, dodge the spikes.</p><p style="margin-bottom:14px;font-size:12px">Space / click / tap</p><button class="btn" id="start">Start</button></div></div>
+  <div class="ov hide" id="go"><div><h2 style="color:#f43f5e">Crashed</h2><p id="gos">Best: 0%</p><button class="btn" id="again" style="margin-top:8px">Retry</button></div></div>
+</div>
+<script>
+(function(){
+var cv=document.getElementById('c'),ctx=cv.getContext('2d'),W=900,H=562;
+var scEl=document.getElementById('sc'),bsEl=document.getElementById('bs'),stEl=document.getElementById('st'),goEl=document.getElementById('go'),gosEl=document.getElementById('gos');
+var best=+localStorage.getItem('arcadiaGDBus')||0;bsEl.textContent=best+'%';
+var G=H-80; // ground
+var player,obs,speed,score,running,dead,scrollX,jumpHeld;
+// build a level pattern that repeats
+function makeLevel(){
+  var arr=[];var x=600;
+  for(var i=0;i<40;i++){
+    var r=Math.random();
+    if(r<0.4){arr.push({x:x,t:'spike'});x+=48;}
+    else if(r<0.65){arr.push({x:x,t:'spike'});arr.push({x:x+44,t:'spike'});x+=48+90;}
+    else if(r<0.85){arr.push({x:x,t:'block',w:60,h:60});x+=120;}
+    else{x+=140;}
+  }
+  return arr;
+}
+function reset(){
+  player={x:180,y:G-30,vy:0,r:22,onG:true,rot:0};speed=5.5;score=0;scrollX=0;dead=false;running=true;obs=makeLevel();jumpHeld=false;
+  stEl.classList.add('hide');goEl.classList.add('hide');
+}
+function jump(){if(player.onG){player.vy=-12.5;player.onG=false;}}
+function upd(){
+  if(!running)return;
+  scrollX+=speed;score=Math.min(100,Math.floor(scrollX/30));
+  // gravity
+  player.vy+=0.62;player.y+=player.vy;
+  if(player.y>=G-player.r){player.y=G-player.r;player.vy=0;player.onG=true;player.rot=0;}else{player.rot+=0.16;}
+  // check obstacle collisions
+  for(var i=0;i<obs.length;i++){var o=obs[i];var ox=o.x-scrollX;
+    if(ox> -60 && ox < W+60){
+      if(o.t==='spike'){
+        // triangle spike at ground
+        var sx=ox,sy=G,sw=40,sh=40;
+        // AABB-ish with shrink
+        if(player.x+player.r*0.7>sx && player.x-player.r*0.7<sx+sw && player.y+player.r*0.7>sy-sh){die();return;}
+      } else if(o.t==='block'){
+        var bx=ox,by=G-o.h;
+        if(player.x+player.r>bx && player.x-player.r<bx+o.w && player.y+player.r>by && player.y-player.r<by+o.h){
+          // landed on top?
+          if(player.vy>0 && player.y+player.r-player.vy<=by+6){player.y=by-player.r;player.vy=0;player.onG=true;}
+          else{die();return;}
+        }
+      }
+    }
+  }
+  // hold to keep jumping if on ground
+  if(jumpHeld&&player.onG)jump();
+  scEl.textContent=score+'%';
+}
+function die(){dead=true;running=false;if(score>best){best=score;localStorage.setItem('arcadiaGDBus',best);}bsEl.textContent=best+'%';gosEl.textContent='Best: '+best+'%';goEl.classList.remove('hide');}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // bg gradient
+  var g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#0f0f1c');g.addColorStop(1,'#0A0A12');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  // bg grid
+  ctx.strokeStyle='rgba(124,58,237,.12)';ctx.lineWidth=1;var off=(scrollX*0.3)%60;
+  for(var x=-off;x<W;x+=60){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(var y=0;y<H;y+=60){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  // ground
+  ctx.fillStyle='#14142a';ctx.fillRect(0,G,W,H-G);
+  ctx.strokeStyle='#7C3AED';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,G);ctx.lineTo(W,G);ctx.stroke();
+  // scroll markers on ground
+  ctx.fillStyle='rgba(34,211,238,.4)';var mo=(scrollX)%120;
+  for(var x=-mo;x<W;x+=120){ctx.fillRect(x,G-3,3,3);}
+  // obstacles
+  obs.forEach(function(o){var ox=o.x-scrollX;if(ox<-80||ox>W+80)return;
+    if(o.t==='spike'){ctx.fillStyle='#f43f5e';ctx.shadowColor='#f43f5e';ctx.shadowBlur=10;ctx.beginPath();ctx.moveTo(ox,G);ctx.lineTo(ox+20,G-40);ctx.lineTo(ox+40,G);ctx.closePath();ctx.fill();ctx.shadowBlur=0;}
+    else if(o.t==='block'){ctx.fillStyle='#22D3EE';ctx.shadowColor='#22D3EE';ctx.shadowBlur=8;ctx.fillRect(ox,G-o.h,o.w,o.h);ctx.shadowBlur=0;ctx.strokeStyle='rgba(255,255,255,.2)';ctx.strokeRect(ox,G-o.h,o.w,o.h);}
+  });
+  // player
+  ctx.save();ctx.translate(player.x,player.y);ctx.rotate(player.rot);
+  ctx.fillStyle='#22D3EE';ctx.shadowColor='#22D3EE';ctx.shadowBlur=16;ctx.fillRect(-player.r,-player.r,player.r*2,player.r*2);
+  ctx.shadowBlur=0;ctx.fillStyle='#0A0A12';ctx.fillRect(-player.r*0.4,-player.r*0.4,player.r*0.8,player.r*0.8);
+  ctx.restore();
+}
+function loop(){if(running)upd();draw();requestAnimationFrame(loop);}
+function act(e){e.preventDefault();jumpHeld=true;if(!running&&!dead){reset();return;}if(running)jump();}
+function rel(e){e.preventDefault();jumpHeld=false;}
+window.addEventListener('keydown',function(e){if(e.key===' '||e.key==='ArrowUp'){e.preventDefault();jumpHeld=true;if(running)jump();else if(!dead)reset();}});
+window.addEventListener('keyup',function(e){if(e.key===' '||e.key==='ArrowUp')jumpHeld=false;});
+cv.addEventListener('mousedown',act);cv.addEventListener('mouseup',rel);
+cv.addEventListener('touchstart',act,{passive:false});cv.addEventListener('touchend',rel,{passive:false});
+document.getElementById('start').onclick=reset;
+document.getElementById('again').onclick=reset;
+loop();
+})();
+</script>
+</body>
+</html>

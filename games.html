@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Browse Games — Arcadia</title>
+<meta name="description" content="Browse every free browser game on Arcadia. Search, filter by category, sort, and save favorites.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="nav-slot"></div>
+
+<main id="main">
+  <div class="wrap" style="padding-top:28px;padding-bottom:40px">
+    <div class="reveal" style="margin-bottom:18px">
+      <h1 style="font-size:clamp(26px,5vw,38px)"><span class="grad" id="title">Browse Games</span></h1>
+      <p class="muted" style="margin-top:6px;font-size:14px" id="subtitle">Every game self-hosted and free. Search, filter and find your next obsession.</p>
+    </div>
+
+    <!-- toolbar -->
+    <div class="toolbar reveal">
+      <div class="toolbar-top">
+        <div class="search-box">
+          <span class="search-ic"><svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>
+          <input id="search" type="search" placeholder="Search games, tags…" aria-label="Search games" autocomplete="off">
+          <button class="icon-btn search-clear" id="searchClear" style="display:none" aria-label="Clear search"><svg class="icon" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div class="toolbar-right">
+          <button class="toggle" id="favToggle"><svg class="icon" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg><span>Favorites</span><span id="favCount" class="fav-badge zero">0</span></button>
+          <div class="sort-group">
+            <span class="label"><svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>Sort</span>
+            <div class="opts">
+              <button class="sort-btn" data-sort="popular">Popular</button>
+              <button class="sort-btn" data-sort="newest">Newest</button>
+              <button class="sort-btn" data-sort="az">A–Z</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tabs" id="tabs"></div>
+    </div>
+
+    <div class="result-count" id="count"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+</main>
+
+<div id="footer-slot"></div>
+
+<script src="js/games.js"></script>
+<script src="js/app.js"></script>
+<script>
+(function () {
+  window.ARCADIA_NAV("games");
+  window.ARCADIA_FOOTER();
+
+  var A = window.ARCADIA, S = window.ARCADIA_STORE;
+  function qs(n) { var m = new RegExp("[?&]" + n + "=([^&]*)").exec(location.search); return m ? decodeURIComponent(m[1]) : null; }
+
+  var state = {
+    q: qs("q") || "",
+    cat: qs("cat") && qs("cat") !== "all" ? qs("cat") : "all",
+    sort: qs("sort") || "popular",
+    fav: qs("fav") === "1"
+  };
+
+  var titleEl = document.getElementById("title");
+  var subEl = document.getElementById("subtitle");
+  if (state.fav) { titleEl.textContent = "Your Favorites"; subEl.textContent = "Games you've saved. Tap the heart on any card to add or remove."; }
+  else if (state.cat !== "all") { var c = A.catById(state.cat); if (c) titleEl.textContent = c.name + " Games"; }
+
+  // search
+  var search = document.getElementById("search"); search.value = state.q;
+  var searchClear = document.getElementById("searchClear"); searchClear.style.display = state.q ? "grid" : "none";
+  search.addEventListener("input", function () { state.q = search.value; searchClear.style.display = state.q ? "grid" : "none"; render(); });
+  searchClear.addEventListener("click", function () { search.value = ""; state.q = ""; searchClear.style.display = "none"; render(); search.focus(); });
+
+  // favorites toggle
+  var favToggle = document.getElementById("favToggle");
+  var favCountEl = document.getElementById("favCount");
+  function syncFavUI() { var n = S.getFavs().length; favToggle.classList.toggle("on", state.fav); favCountEl.textContent = n; favCountEl.classList.toggle("zero", !n); }
+  favToggle.addEventListener("click", function () { state.fav = !state.fav; syncFavUI(); render(); });
+  syncFavUI();
+
+  // sort
+  var sortBtns = document.querySelectorAll(".sort-btn");
+  sortBtns.forEach(function (b) { b.classList.toggle("on", b.dataset.sort === state.sort); b.addEventListener("click", function () { state.sort = b.dataset.sort; sortBtns.forEach(function (x) { x.classList.toggle("on", x === b); }); render(); }); });
+
+  // category tabs
+  var tabs = document.getElementById("tabs");
+  var allTab = { id: "all", name: "All", accent: "#7C3AED" };
+  [allTab].concat(A.cats).forEach(function (c) {
+    var t = document.createElement("button");
+    t.className = "tab" + (c.id === state.cat ? " on" : "");
+    t.innerHTML = '<span class="dot" style="background:' + c.accent + ';box-shadow:0 0 8px ' + c.accent + '"></span>' + c.name;
+    t.addEventListener("click", function () { state.cat = c.id; tabs.querySelectorAll(".tab").forEach(function (x) { x.classList.toggle("on", x === t); }); titleEl.textContent = c.id === "all" ? "Browse Games" : c.name + " Games"; render(); });
+    tabs.appendChild(t);
+  });
+
+  function applyFilters() {
+    var list = A.all.slice();
+    if (state.cat !== "all") list = list.filter(function (g) { return g.category === state.cat; });
+    if (state.fav) list = list.filter(function (g) { return S.isFav(g.id); });
+    var q = state.q.trim().toLowerCase();
+    if (q) list = list.filter(function (g) { return g.title.toLowerCase().indexOf(q) >= 0 || g.description.toLowerCase().indexOf(q) >= 0 || g.tags.some(function (t) { return t.indexOf(q) >= 0; }) || g.category.indexOf(q) >= 0; });
+    if (state.sort === "newest") list.sort(function (a, b) { return new Date(b.added) - new Date(a.added); });
+    else if (state.sort === "az") list.sort(function (a, b) { return a.title.localeCompare(b.title); });
+    else list.sort(function (a, b) { return b.plays - a.plays; });
+    return list;
+  }
+
+  var grid = document.getElementById("grid");
+  var countEl = document.getElementById("count");
+  function render() {
+    var list = applyFilters();
+    grid.innerHTML = "";
+    if (list.length === 0) {
+      grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><h3>' + (state.fav ? "No favorites yet" : "No games found") + '</h3><p>' + (state.fav ? "Tap the heart on any game to save it here for quick access." : "Try a different search term or category.") + '</p><button class="btn btn-primary" id="resetBtn">Reset filters</button></div>';
+      var rb = document.getElementById("resetBtn"); if (rb) rb.addEventListener("click", function () { state.q = ""; state.cat = "all"; state.fav = false; search.value = ""; searchClear.style.display = "none"; tabs.querySelectorAll(".tab").forEach(function (x, i) { x.classList.toggle("on", i === 0); }); syncFavUI(); titleEl.textContent = "Browse Games"; render(); });
+    } else {
+      list.forEach(function (g) { grid.appendChild(window.ARCADIA_CARD(g)); });
+    }
+    countEl.innerHTML = 'Showing <b>' + list.length + "</b> " + (list.length === 1 ? "game" : "games") + (state.cat !== "all" ? " in <b>" + A.catById(state.cat).name + "</b>" : "") + (state.q ? ' matching "<b>' + state.q + '</b>"' : "");
+  }
+  render();
+  window.ARCADIA_REVEAL();
+})();
+</script>
+</body>
+</html>

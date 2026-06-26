@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Connect Four &middot; Arcadia</title>
+<style>
+  :root {
+    --bg: #0A0A12;
+    --panel: #14141f;
+    --panel-2: #1b1b2b;
+    --text: #E5E7EB;
+    --muted: #8b8ba0;
+    --player: #22D3EE;
+    --ai: #7C3AED;
+    --board-bg: #0d1b3a;
+    --hole: #060912;
+    --border: #2a2a3c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(circle at 50% 0%, #16162a 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 12px 28px;
+    min-height: 100%;
+    user-select: none;
+  }
+  h1 { font-size: clamp(22px, 6vw, 30px); letter-spacing: 1px; margin-bottom: 4px; font-weight: 700; }
+  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 14px; text-align: center; }
+  .scoreboard {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
+    width: 100%; max-width: 460px; margin-bottom: 14px;
+  }
+  .score-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 9px 6px; text-align: center; }
+  .score-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  .score-value { font-size: 22px; font-weight: 700; margin-top: 2px; }
+  .score-player .score-value { color: var(--player); }
+  .score-ai .score-value { color: var(--ai); }
+  .game-wrap { width: 100%; max-width: 460px; }
+  .board {
+    position: relative;
+    background: var(--board-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 10px;
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    grid-template-rows: repeat(6, 1fr);
+    gap: 6px;
+    aspect-ratio: 7 / 6;
+    box-shadow: inset 0 0 40px rgba(0,0,0,0.5);
+  }
+  .slot {
+    position: relative;
+    background: var(--hole);
+    border-radius: 50%;
+    box-shadow: inset 0 3px 6px rgba(0,0,0,0.6);
+    overflow: hidden;
+  }
+  .piece {
+    position: absolute;
+    inset: 4%;
+    border-radius: 50%;
+    transform: translateY(-220%);
+    opacity: 0;
+    transition: transform .28s cubic-bezier(.4,1.4,.6,1), opacity .12s linear;
+  }
+  .piece.placed { transform: translateY(0); opacity: 1; }
+  .piece.p1 {
+    background: radial-gradient(circle at 35% 30%, #7af2ff 0%, var(--player) 55%, #0d6d80 100%);
+    box-shadow: 0 0 12px rgba(34,211,238,0.55);
+  }
+  .piece.p2 {
+    background: radial-gradient(circle at 35% 30%, #b48bff 0%, var(--ai) 55%, #3c1c80 100%);
+    box-shadow: 0 0 12px rgba(124,58,237,0.55);
+  }
+  .piece.win {
+    animation: pulse 0.7s ease-in-out infinite alternate;
+  }
+  @keyframes pulse {
+    from { box-shadow: 0 0 12px rgba(255,255,255,0.4); }
+    to { box-shadow: 0 0 26px rgba(255,255,255,0.95); }
+  }
+  .col-hover {
+    position: absolute; top: -8px; bottom: 0;
+    background: rgba(255,255,255,0.04);
+    border-radius: 8px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .1s;
+  }
+  .col-hover.show { opacity: 1; }
+  .preview-piece {
+    position: absolute; top: -38px;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #7af2ff 0%, var(--player) 55%, #0d6d80 100%);
+    box-shadow: 0 0 12px rgba(34,211,238,0.55);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .1s, left .08s;
+  }
+  .preview-piece.show { opacity: 1; }
+  .status { margin-top: 12px; font-size: 15px; min-height: 22px; text-align: center; }
+  .status.thinking { color: var(--muted); font-style: italic; }
+  .status.win { color: var(--player); font-weight: 700; }
+  .status.lose { color: var(--ai); font-weight: 700; }
+  .status.draw { color: var(--muted); font-weight: 700; }
+  .controls { margin-top: 10px; display: flex; gap: 10px; justify-content: center; }
+  button.btn {
+    background: var(--player); color: #06121a; border: none; border-radius: 10px;
+    padding: 11px 22px; font-size: 14px; font-weight: 700; cursor: pointer; letter-spacing: .5px;
+    transition: filter .15s ease, transform .08s ease;
+  }
+  button.btn:hover { filter: brightness(1.1); }
+  button.btn:active { transform: scale(0.97); }
+  button.btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  button.btn.ghost:hover { background: var(--panel); }
+  footer { margin-top: auto; padding-top: 16px; font-size: 11px; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+  <h1>CONNECT FOUR</h1>
+  <p class="subtitle">Click a column to drop your piece. Connect 4 to win.</p>
+
+  <div class="scoreboard">
+    <div class="score-card score-player"><div class="score-label">You</div><div class="score-value" id="scoreP">0</div></div>
+    <div class="score-card"><div class="score-label">Draws</div><div class="score-value" id="scoreD">0</div></div>
+    <div class="score-card score-ai"><div class="score-label">AI</div><div class="score-value" id="scoreA">0</div></div>
+  </div>
+
+  <div class="game-wrap">
+    <div style="position: relative;">
+      <div class="preview-piece" id="preview"></div>
+      <div class="board" id="board"></div>
+    </div>
+  </div>
+
+  <div class="status" id="status">Your turn.</div>
+
+  <div class="controls">
+    <button class="btn" id="newGameBtn">New Game</button>
+    <button class="btn ghost" id="resetScoreBtn">Reset Score</button>
+  </div>
+
+  <footer>Arcadia &middot; Connect Four</footer>
+
+<script>
+(function () {
+  "use strict";
+  var COLS = 7, ROWS = 6;
+  var HUMAN = 1, AI = 2;
+  var MAX_DEPTH = 4;
+
+  var boardDom, statusEl, preview, scorePEl, scoreAEl, scoreDEl;
+  var slots = [];
+  var pieceEls = [];
+  var grid;
+  var score = { P: 0, A: 0, D: 0 };
+  var gameOver = false;
+  var aiThinking = false;
+  var colHover = null;
+
+  function makeGrid() {
+    var g = [];
+    for (var r = 0; r < ROWS; r++) {
+      var row = [];
+      for (var c = 0; c < COLS; c++) row.push(0);
+      g.push(row);
+    }
+    return g;
+  }
+
+  function validCols(g) {
+    var cols = [];
+    for (var c = 0; c < COLS; c++) if (g[0][c] === 0) cols.push(c);
+    return cols;
+  }
+
+  function dropRow(g, col) {
+    for (var r = ROWS - 1; r >= 0; r--) {
+      if (g[r][col] === 0) return r;
+    }
+    return -1;
+  }
+
+  function checkWin(g, player) {
+    // Horizontal
+    for (var r = 0; r < ROWS; r++) {
+      for (var c = 0; c <= COLS - 4; c++) {
+        if (g[r][c] === player && g[r][c+1] === player && g[r][c+2] === player && g[r][c+3] === player)
+          return [[r,c],[r,c+1],[r,c+2],[r,c+3]];
+      }
+    }
+    // Vertical
+    for (var c = 0; c < COLS; c++) {
+      for (var r = 0; r <= ROWS - 4; r++) {
+        if (g[r][c] === player && g[r+1][c] === player && g[r+2][c] === player && g[r+3][c] === player)
+          return [[r,c],[r+1,c],[r+2,c],[r+3,c]];
+      }
+    }
+    // Diagonal down-right
+    for (var r = 0; r <= ROWS - 4; r++) {
+      for (var c = 0; c <= COLS - 4; c++) {
+        if (g[r][c] === player && g[r+1][c+1] === player && g[r+2][c+2] === player && g[r+3][c+3] === player)
+          return [[r,c],[r+1,c+1],[r+2,c+2],[r+3,c+3]];
+      }
+    }
+    // Diagonal up-right
+    for (var r = 3; r < ROWS; r++) {
+      for (var c = 0; c <= COLS - 4; c++) {
+        if (g[r][c] === player && g[r-1][c+1] === player && g[r-2][c+2] === player && g[r-3][c+3] === player)
+          return [[r,c],[r-1,c+1],[r-2,c+2],[r-3,c+3]];
+      }
+    }
+    return null;
+  }
+
+  function isFull(g) {
+    for (var c = 0; c < COLS; c++) if (g[0][c] === 0) return false;
+    return true;
+  }
+
+  // Evaluation: count runs of 2,3,4 weighted
+  function evaluateLine(g, player) {
+    var opp = player === AI ? HUMAN : AI;
+    var score = 0;
+    // Horizontal
+    for (var r = 0; r < ROWS; r++) {
+      for (var c = 0; c <= COLS - 4; c++) {
+        var window = [g[r][c], g[r][c+1], g[r][c+2], g[r][c+3]];
+        score += evalWindow(window, player, opp);
+      }
+    }
+    // Vertical
+    for (var c = 0; c < COLS; c++) {
+      for (var r = 0; r <= ROWS - 4; r++) {
+        var window = [g[r][c], g[r+1][c], g[r+2][c], g[r+3][c]];
+        score += evalWindow(window, player, opp);
+      }
+    }
+    // Diag down-right
+    for (var r = 0; r <= ROWS - 4; r++) {
+      for (var c = 0; c <= COLS - 4; c++) {
+        var window = [g[r][c], g[r+1][c+1], g[r+2][c+2], g[r+3][c+3]];
+        score += evalWindow(window, player, opp);
+      }
+    }
+    // Diag up-right
+    for (var r = 3; r < ROWS; r++) {
+      for (var c = 0; c <= COLS - 4; c++) {
+        var window = [g[r][c], g[r-1][c+1], g[r-2][c+2], g[r-3][c+3]];
+        score += evalWindow(window, player, opp);
+      }
+    }
+    // Center column preference
+    for (var rr = 0; rr < ROWS; rr++) {
+      if (g[rr][3] === player) score += 3;
+    }
+    return score;
+  }
+
+  function evalWindow(w, player, opp) {
+    var pc = 0, oc = 0, ec = 0;
+    for (var i = 0; i < 4; i++) {
+      if (w[i] === player) pc++;
+      else if (w[i] === opp) oc++;
+      else ec++;
+    }
+    if (oc > 0 && pc > 0) return 0;
+    if (pc === 4) return 100000;
+    if (pc === 3 && ec === 1) return 50;
+    if (pc === 2 && ec === 2) return 10;
+    if (oc === 3 && ec === 1) return -80;
+    if (oc === 2 && ec === 2) return -8;
+    return 0;
+  }
+
+  function minimax(g, depth, alpha, beta, maximizing) {
+    var aiWin = checkWin(g, AI);
+    var huWin = checkWin(g, HUMAN);
+    if (aiWin) return { score: 1000000 + depth, col: -1 };
+    if (huWin) return { score: -1000000 - depth, col: -1 };
+    if (isFull(g)) return { score: 0, col: -1 };
+    if (depth === 0) return { score: evaluateLine(g, AI), col: -1 };
+
+    var cols = validCols(g);
+    // Center-first ordering for better pruning
+    cols.sort(function (a, b) { return Math.abs(a - 3) - Math.abs(b - 3); });
+
+    var bestCol = cols[0];
+    if (maximizing) {
+      var value = -Infinity;
+      for (var i = 0; i < cols.length; i++) {
+        var c = cols[i];
+        var r = dropRow(g, c);
+        g[r][c] = AI;
+        var res = minimax(g, depth - 1, alpha, beta, false);
+        g[r][c] = 0;
+        if (res.score > value) { value = res.score; bestCol = c; }
+        alpha = Math.max(alpha, value);
+        if (alpha >= beta) break;
+      }
+      return { score: value, col: bestCol };
+    } else {
+      var value = Infinity;
+      for (var i = 0; i < cols.length; i++) {
+        var c = cols[i];
+        var r = dropRow(g, c);
+        g[r][c] = HUMAN;
+        var res = minimax(g, depth - 1, alpha, beta, true);
+        g[r][c] = 0;
+        if (res.score < value) { value = res.score; bestCol = c; }
+        beta = Math.min(beta, value);
+        if (alpha >= beta) break;
+      }
+      return { score: value, col: bestCol };
+    }
+  }
+
+  function buildBoardDom() {
+    boardDom.innerHTML = "";
+    slots = [];
+    pieceEls = [];
+    for (var r = 0; r < ROWS; r++) {
+      slots.push([]);
+      pieceEls.push([]);
+      for (var c = 0; c < COLS; c++) {
+        var slot = document.createElement("div");
+        slot.className = "slot";
+        slot.dataset.col = c;
+        slot.dataset.row = r;
+        var piece = document.createElement("div");
+        piece.className = "piece";
+        slot.appendChild(piece);
+        boardDom.appendChild(slot);
+        slots[r].push(slot);
+        pieceEls[r].push(piece);
+      }
+    }
+  }
+
+  function renderPiece(r, c, player) {
+    var p = pieceEls[r][c];
+    p.classList.remove("p1", "p2");
+    p.classList.add(player === HUMAN ? "p1" : "p2");
+    // Force reflow then add placed
+    void p.offsetWidth;
+    p.classList.add("placed");
+  }
+
+  function clearPreview() {
+    preview.classList.remove("show");
+  }
+
+  function showPreview(col) {
+    if (gameOver || aiThinking) return;
+    var firstSlot = slots[0][col];
+    var boardRect = boardDom.getBoundingClientRect();
+    var slotRect = firstSlot.getBoundingClientRect();
+    var left = slotRect.left - boardRect.left + slotRect.width / 2 - 15;
+    preview.style.left = left + "px";
+    preview.classList.add("show");
+  }
+
+  function setStatus(text, cls) {
+    statusEl.textContent = text;
+    statusEl.className = "status" + (cls ? " " + cls : "");
+  }
+
+  function highlightWin(line, player) {
+    for (var i = 0; i < line.length; i++) {
+      var r = line[i][0], c = line[i][1];
+      pieceEls[r][c].classList.add("win");
+    }
+  }
+
+  function endGame(result) {
+    gameOver = true;
+    if (result === "win") {
+      score.P++;
+      setStatus("You win!", "win");
+    } else if (result === "lose") {
+      score.A++;
+      setStatus("AI wins.", "lose");
+    } else {
+      score.D++;
+      setStatus("Draw.", "draw");
+    }
+    updateScore();
+  }
+
+  function updateScore() {
+    scorePEl.textContent = score.P;
+    scoreAEl.textContent = score.A;
+    scoreDEl.textContent = score.D;
+  }
+
+  function onColClick(col) {
+    if (gameOver || aiThinking) return;
+    if (validCols(grid).indexOf(col) < 0) return;
+    var r = dropRow(grid, col);
+    grid[r][col] = HUMAN;
+    renderPiece(r, col, HUMAN);
+    clearPreview();
+    var win = checkWin(grid, HUMAN);
+    if (win) { highlightWin(win, HUMAN); endGame("win"); return; }
+    if (isFull(grid)) { endGame("draw"); return; }
+    aiTurn();
+  }
+
+  function aiTurn() {
+    aiThinking = true;
+    setStatus("AI is thinking...", "thinking");
+    setTimeout(function () {
+      var res = minimax(grid, MAX_DEPTH, -Infinity, Infinity, true);
+      var col = res.col;
+      if (col < 0 || validCols(grid).indexOf(col) < 0) {
+        var vc = validCols(grid);
+        if (!vc.length) { aiThinking = false; return; }
+        col = vc[Math.floor(Math.random() * vc.length)];
+      }
+      var r = dropRow(grid, col);
+      grid[r][col] = AI;
+      renderPiece(r, col, AI);
+      aiThinking = false;
+      var win = checkWin(grid, AI);
+      if (win) { highlightWin(win, AI); endGame("lose"); return; }
+      if (isFull(grid)) { endGame("draw"); return; }
+      setStatus("Your turn.");
+    }, 280);
+  }
+
+  function newGame() {
+    grid = makeGrid();
+    gameOver = false;
+    aiThinking = false;
+    buildBoardDom();
+    setStatus("Your turn.");
+  }
+
+  function resetScore() {
+    score = { P: 0, A: 0, D: 0 };
+    updateScore();
+    newGame();
+  }
+
+  function init() {
+    boardDom = document.getElementById("board");
+    statusEl = document.getElementById("status");
+    preview = document.getElementById("preview");
+    scorePEl = document.getElementById("scoreP");
+    scoreAEl = document.getElementById("scoreA");
+    scoreDEl = document.getElementById("scoreD");
+
+    boardDom.addEventListener("click", function (e) {
+      var t = e.target.closest(".slot");
+      if (!t) return;
+      onColClick(parseInt(t.dataset.col, 10));
+    });
+    boardDom.addEventListener("mousemove", function (e) {
+      var t = e.target.closest(".slot");
+      if (!t) return;
+      var col = parseInt(t.dataset.col, 10);
+      if (col !== colHover) {
+        colHover = col;
+        showPreview(col);
+      }
+    });
+    boardDom.addEventListener("mouseleave", function () {
+      colHover = null;
+      clearPreview();
+    });
+    boardDom.addEventListener("touchstart", function (e) {
+      var t = e.target.closest(".slot");
+      if (!t) return;
+      var col = parseInt(t.dataset.col, 10);
+      showPreview(col);
+    }, { passive: true });
+
+    document.getElementById("newGameBtn").addEventListener("click", newGame);
+    document.getElementById("resetScoreBtn").addEventListener("click", resetScore);
+
+    newGame();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
