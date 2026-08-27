@@ -58,6 +58,7 @@ arcadia/
 │   ├── app.js          # Shared logic: favorites, ratings, cards, nav, footer, reveal
 │   └── player.js       # Play-page logic: iframe, fullscreen, star rating, related
 ├── vercel.json         # Clean URLs + headers
+├── LICENSE             # MIT
 ├── README.md           # This file
 └── games/              # Self-hosted games — one folder per game
     ├── 2048/index.html
@@ -188,3 +189,9 @@ Good sources for self-hostable games (check each license before committing):
 Arcadia is built for gamers. All self-hosted games are original implementations or open-source homages written for this project. "Redirect" games link to their original creators. If you own a linked game and want it removed, open an issue.
 
 Enjoy Arcadia? [Buy us a coffee](https://buymeacoffee.com/jeffreyscof) to keep it free.
+
+## License
+
+MIT — see [LICENSE](LICENSE). The self-hosted games are original
+implementations written for this project; the three redirect entries link to
+their original creators and are not covered by it.
